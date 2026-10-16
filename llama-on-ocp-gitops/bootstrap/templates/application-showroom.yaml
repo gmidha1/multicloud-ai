@@ -1,0 +1,26 @@
+{{ if .Values.showroom -}}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: showroom-apps
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: {{ .Values.git.url }}
+    targetRevision: {{ .Values.showroom.addons.repoRef }}
+    path: {{ .Values.showroom.addons.repoPath }}
+    helm:
+      values: |
+        user:
+          count: "{{ .Values.user.count }}"
+        deployer:
+          domain: {{ .Values.deployer.domain }}
+        content:
+          repoUrl: {{ .Values.showroom.content.repoUrl }}
+          repoRef: {{ .Values.showroom.content.repoRef }}
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: openshift-gitops
+{{- end }}

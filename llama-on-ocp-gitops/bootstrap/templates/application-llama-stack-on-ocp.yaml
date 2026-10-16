@@ -1,0 +1,19 @@
+{{ if .Values.llama -}}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: llama-stack-on-ocp
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: {{ .Values.llama.git_url }}
+    path: {{ .Values.llama.git_path }}
+    targetRevision: {{ .Values.llama.git_revision}}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.llama.namespace}}
+  syncPolicy:
+    automated: {}
+{{- end }}
