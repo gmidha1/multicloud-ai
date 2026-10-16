@@ -1,0 +1,143 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: llamastack-deployment
+  namespace: openshift-gitops
+spec:
+  generators:
+    # Generate apps for clusters with GPU label
+    - clusterDecisionResource:
+        configMapRef: acm-placement
+        labelSelector:
+          matchLabels:
+            cluster.open-cluster-management.io/placement: gpu-clusters
+        requeueAfterSeconds: 180
+  template:
+    metadata:
+      name: 'llamastack-rosa-gpu2'
+      labels:
+        app: llamastack
+        cluster: 'rosa-gpu2'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/rhpds/llama-stack-on-ocp.git
+        targetRevision: main
+        path: kubernetes/kustomize/overlay/demo
+      destination:
+        server: 'https://api.rosa-jvtjx.tm8i.p3.openshiftapps.com:443'
+        namespace: llama-serve
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - RespectIgnoreDifferences=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+      ignoreDifferences:
+        - group: serving.kserve.io
+          kind: InferenceService
+          jsonPointers:
+            - /status
+
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: gpu-clusters
+  namespace: openshift-gitops
+spec:
+  clusterSets:
+    - default  # Change to "global" if your clusters are in the global clusterset
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchExpressions:
+            - key: gpu-enabled
+              operator: In
+              values:
+                - "true"
+            - key: vendor
+              operator: In
+              values:
+                - OpenShift
+  numberOfClusters: 10
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: acm-placement
+  namespace: openshift-gitops
+data:
+  apiVersion: cluster.open-cluster-management.io/v1beta1
+  kind: PlacementDecision
+  resource: placementdecisions
+  statusListKey: decisions
+  matchKey: clusterName
+
+
+
+
+
+working one
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: llamastack
+  namespace: openshift-gitops
+spec:
+  generators:
+    - clusterDecisionResource:
+        configMapRef: acm-placement
+        labelSelector:
+          matchLabels:
+            cluster.open-cluster-management.io/placement: llamastack-placement
+        requeueAfterSeconds: 180
+  template:
+    metadata:
+      name: llamastack-{{name}}
+      labels:
+        velero.io/exclude-from-backup: "true"
+    spec:
+      project: default
+      sources:
+        - repositoryType: git
+          repoURL: https://github.com/rhpds/llama-stack-on-ocp.git
+          targetRevision: main
+          path: kubernetes/kustomize/overlay/all-models
+      destination:
+        namespace: default
+        server: "{{server}}"
+      syncPolicy:
+        automated:
+          selfHeal: true
+          prune: true
+        syncOptions:
+          - CreateNamespace=true
+          - PruneLast=true
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: llamastack-placement
+  namespace: openshift-gitops
+spec:
+  numberOfClusters: 1
+  clusterSets:
+    - default
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchExpressions:
+            - key: gpu-enabled
+              operator: In
+              values:
+                - "true"

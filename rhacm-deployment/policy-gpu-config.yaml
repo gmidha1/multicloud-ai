@@ -1,0 +1,242 @@
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: llama-stack-gpu-config
+  namespace: llama-stack-policies
+spec:
+  remediationAction: enforce
+  disabled: false
+  policy-templates:
+    # Label GPU Nodes
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: label-gpu-nodes
+        spec:
+          remediationAction: inform  # Manual step - needs node name
+          severity: medium
+          namespaceSelector:
+            exclude:
+              - kube-*
+            include:
+              - default
+          object-templates-raw: |
+            {{- range (lookup "v1" "Node" "" "").items }}
+            {{- if index .status.capacity "nvidia.com/gpu" }}
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: v1
+                kind: Node
+                metadata:
+                  name: {{ .metadata.name }}
+                  labels:
+                    node-role.kubernetes.io/worker-gpu: ""
+            {{- end }}
+            {{- end }}
+
+    # NFD Instance
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: nfd-instance
+        spec:
+          remediationAction: enforce
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: nfd.openshift.io/v1
+                kind: NodeFeatureDiscovery
+                metadata:
+                  name: nfd-instance
+                  namespace: openshift-nfd
+                spec:
+                  instance: ""
+                  operand:
+                    imagePullPolicy: Always
+                  workerConfig:
+                    configData: |
+                      sources:
+                        pci:
+                          deviceClassWhitelist:
+                          - "03"
+                          - "0200"
+                          - "0207"
+                          deviceLabelFields:
+                          - "vendor"
+
+    # GPU ClusterPolicy
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: gpu-cluster-policy
+        spec:
+          remediationAction: enforce
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: nvidia.com/v1
+                kind: ClusterPolicy
+                metadata:
+                  name: gpu-cluster-policy
+                spec:
+                  daemonsets:
+                    tolerations:
+                    - key: nvidia.com/gpu
+                      operator: Exists
+                      effect: NoSchedule
+                  dcgm:
+                    enabled: true
+                  dcgmExporter:
+                    enabled: true
+                  driver:
+                    enabled: true
+                  gfd:
+                    enabled: true
+                  devicePlugin:
+                    enabled: true
+                  toolkit:
+                    enabled: true
+                  mig:
+                    strategy: single
+                  nodeStatusExporter:
+                    enabled: true
+                  operator:
+                    defaultRuntime: crio
+                  validator:
+                    plugin:
+                      env:
+                      - name: WITH_WORKLOAD
+                        value: "false"
+
+    # Service Mesh Control Plane (Required for KServe)
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: servicemesh-controlplane
+        spec:
+          remediationAction: enforce
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: v1
+                kind: Namespace
+                metadata:
+                  name: istio-system
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: maistra.io/v2
+                kind: ServiceMeshControlPlane
+                metadata:
+                  name: data-science-smcp
+                  namespace: istio-system
+                spec:
+                  version: v2.5
+                  tracing:
+                    type: None
+                  addons:
+                    grafana:
+                      enabled: false
+                    kiali:
+                      enabled: false
+                    prometheus:
+                      enabled: false
+                  security:
+                    dataPlane:
+                      mtls: true
+                    identity:
+                      type: ThirdParty
+
+    # Knative Serving (Required for KServe Serverless)
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: knative-serving
+        spec:
+          remediationAction: enforce
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: v1
+                kind: Namespace
+                metadata:
+                  name: knative-serving
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: operator.knative.dev/v1beta1
+                kind: KnativeServing
+                metadata:
+                  name: knative-serving
+                  namespace: knative-serving
+                spec: {}
+
+    # DataScienceCluster
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: data-science-cluster
+        spec:
+          remediationAction: enforce
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: datasciencecluster.opendatahub.io/v1
+                kind: DataScienceCluster
+                metadata:
+                  name: default-dsc
+                spec:
+                  components:
+                    dashboard:
+                      managementState: Managed
+                    kserve:
+                      managementState: Managed
+                      serving:
+                        ingressGateway:
+                          certificate:
+                            type: SelfSigned
+                        managementState: Managed
+                        name: knative-serving
+                    workbenches:
+                      managementState: Managed
+                    codeflare:
+                      managementState: Removed
+                    datasciencepipelines:
+                      managementState: Removed
+                    kueue:
+                      managementState: Removed
+                    modelmeshserving:
+                      managementState: Removed
+                    modelregistry:
+                      managementState: Removed
+                    ray:
+                      managementState: Removed
+                    trainingoperator:
+                      managementState: Removed
+                    trustyai:
+                      managementState: Removed
+
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: binding-gpu-config
+  namespace: llama-stack-policies
+placementRef:
+  name: placement-gpu-clusters
+  kind: PlacementRule
+  apiGroup: apps.open-cluster-management.io
+subjects:
+  - name: llama-stack-gpu-config
+    kind: Policy
+    apiGroup: policy.open-cluster-management.io

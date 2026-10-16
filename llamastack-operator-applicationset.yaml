@@ -1,0 +1,133 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: llamastack-operator
+  namespace: openshift-gitops
+  creationTimestamp: 2026-04-28T12:09:31Z
+  generation: 1
+  managedFields:
+    - apiVersion: argoproj.io/v1alpha1
+      fieldsType: FieldsV1
+      fieldsV1:
+        f:spec:
+          .: {}
+          f:generators: {}
+          f:template:
+            .: {}
+            f:metadata:
+              .: {}
+              f:labels:
+                .: {}
+                f:velero.io/exclude-from-backup: {}
+              f:name: {}
+            f:spec:
+              .: {}
+              f:destination:
+                .: {}
+                f:namespace: {}
+                f:server: {}
+              f:project: {}
+              f:sources: {}
+              f:syncPolicy:
+                .: {}
+                f:automated:
+                  .: {}
+                  f:prune: {}
+                  f:selfHeal: {}
+                f:syncOptions: {}
+      manager: unknown
+      operation: Update
+      time: 2026-04-28T12:09:31Z
+    - apiVersion: argoproj.io/v1alpha1
+      fieldsType: FieldsV1
+      fieldsV1:
+        f:status:
+          .: {}
+          f:conditions: {}
+          f:resources: {}
+          f:resourcesCount: {}
+      manager: argocd-applicationset-controller
+      operation: Update
+      subresource: status
+      time: 2026-04-28T12:15:32Z
+  resourceVersion: "376061"
+  uid: 383072da-bcf3-495e-a48e-6386259d8e5e
+spec:
+  generators:
+    - clusterDecisionResource:
+        configMapRef: acm-placement
+        labelSelector:
+          matchLabels:
+            cluster.open-cluster-management.io/placement: llamastack-operator-placement
+        requeueAfterSeconds: 180
+  template:
+    metadata:
+      name: llamastack-operator-{{name}}
+      labels:
+        velero.io/exclude-from-backup: "true"
+    spec:
+      destination:
+        namespace: default
+        server: "{{server}}"
+      project: default
+      sources:
+        - path: release/operator.yaml
+          repoURL: https://github.com/llamastack/llama-stack-k8s-operator.git
+          targetRevision: main
+          repositoryType: git
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - PruneLast=true
+status:
+  conditions:
+    - lastTransitionTime: 2026-04-28T12:12:32Z
+      message: All applications have been generated successfully
+      reason: ApplicationSetUpToDate
+      status: "False"
+      type: ErrorOccurred
+    - lastTransitionTime: 2026-04-28T12:12:32Z
+      message: Successfully generated parameters for all Applications
+      reason: ParametersGenerated
+      status: "True"
+      type: ParametersGenerated
+    - lastTransitionTime: 2026-04-28T12:12:32Z
+      message: All applications have been generated successfully
+      reason: ApplicationSetUpToDate
+      status: "True"
+      type: ResourcesUpToDate
+  resources:
+    - name: llamastack-operator-rosa-gpu
+      namespace: openshift-gitops
+      group: argoproj.io
+      health:
+        status: Healthy
+      kind: Application
+      status: Unknown
+      version: v1alpha1
+  resourcesCount: 1
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: llamastack-operator-placement
+  namespace: openshift-gitops
+  creationTimestamp: 2026-04-28T12:09:32Z
+  generation: 1
+  resourceVersion: "371409"
+  uid: c1ab2dc1-350f-418f-9667-bd1e83e4cecd
+spec:
+  clusterSets:
+    - default
+  numberOfClusters: 1
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchExpressions:
+            - key: gpu-enabled
+              operator: In
+              values:
+                - "true"

@@ -1,0 +1,107 @@
+apiVersion: work.open-cluster-management.io/v1
+kind: ManifestWork
+metadata:
+  name: llamastack-granite-model
+  namespace: REPLACE_WITH_CLUSTER_NAME  # Replace with actual managed cluster name
+spec:
+  workload:
+    manifests:
+      # Granite ServingRuntime
+      - apiVersion: serving.kserve.io/v1alpha1
+        kind: ServingRuntime
+        metadata:
+          name: granite32-8b
+          namespace: llama-serve
+        spec:
+          annotations:
+            prometheus.io/path: /metrics
+            prometheus.io/port: "8080"
+          containers:
+          - name: kserve-container
+            image: quay.io/modh/vllm@sha256:4f550996130e7d16cacb24ca9a2865e7cf51eddaab014ceaf31a1ea6ef86d4ec
+            command:
+            - python
+            - -m
+            - vllm.entrypoints.openai.api_server
+            args:
+            - --port=8080
+            - --model=/mnt/models
+            - --max-model-len
+            - "4096"
+            - --gpu-memory-utilization
+            - "0.9"
+            env:
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  key: graniteToken
+                  name: slack-mcp-server-secrets
+            ports:
+            - containerPort: 8080
+              name: http1
+              protocol: TCP
+            volumeMounts:
+            - mountPath: /dev/shm
+              name: shm
+          multiModel: false
+          supportedModelFormats:
+          - autoSelect: true
+            name: vLLM
+          volumes:
+          - name: shm
+            emptyDir:
+              medium: Memory
+              sizeLimit: 2Gi
+
+      # Granite InferenceService
+      - apiVersion: serving.kserve.io/v1beta1
+        kind: InferenceService
+        metadata:
+          name: granite32-8b
+          namespace: llama-serve
+          annotations:
+            serving.kserve.io/deploymentMode: Serverless
+            serving.knative.openshift.io/enablePassthrough: "true"
+            sidecar.istio.io/inject: "true"
+            sidecar.istio.io/rewriteAppHTTPProbers: "true"
+            serving.knative.dev/progress-deadline: "1200s"
+        spec:
+          predictor:
+            maxReplicas: 1
+            minReplicas: 1
+            model:
+              modelFormat:
+                name: vLLM
+              name: ""
+              resources:
+                limits:
+                  cpu: "2"
+                  memory: 16Gi
+                  nvidia.com/gpu: "1"
+                requests:
+                  cpu: "2"
+                  memory: 8Gi
+                  nvidia.com/gpu: "1"
+              runtime: granite32-8b
+              storageUri: oci://quay.io/redhat-ai-services/modelcar-catalog:granite-3.2-8b-instruct
+            tolerations:
+            - effect: NoSchedule
+              key: nvidia.com/gpu
+              operator: Equal
+              value: "True"
+
+  # Track InferenceService readiness
+  manifestConfigs:
+    - resourceIdentifier:
+        group: serving.kserve.io
+        resource: inferenceservices
+        name: granite32-8b
+        namespace: llama-serve
+      feedbackRules:
+        - type: WellKnown
+        - type: JSONPaths
+          jsonPaths:
+            - name: ready
+              path: .status.conditions[?(@.type=="Ready")].status
+            - name: url
+              path: .status.url

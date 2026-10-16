@@ -1,0 +1,152 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: rocketchat
+  namespace: openshift-gitops
+  creationTimestamp: 2026-04-27T14:38:02Z
+  generation: 1
+  managedFields:
+    - apiVersion: argoproj.io/v1alpha1
+      fieldsType: FieldsV1
+      fieldsV1:
+        f:spec:
+          .: {}
+          f:generators: {}
+          f:template:
+            .: {}
+            f:metadata:
+              .: {}
+              f:labels:
+                .: {}
+                f:velero.io/exclude-from-backup: {}
+              f:name: {}
+            f:spec:
+              .: {}
+              f:destination:
+                .: {}
+                f:namespace: {}
+                f:server: {}
+              f:project: {}
+              f:sources: {}
+              f:syncPolicy:
+                .: {}
+                f:automated:
+                  .: {}
+                  f:prune: {}
+                  f:selfHeal: {}
+                f:syncOptions: {}
+      manager: unknown
+      operation: Update
+      time: 2026-04-27T14:38:02Z
+    - apiVersion: argoproj.io/v1alpha1
+      fieldsType: FieldsV1
+      fieldsV1:
+        f:status:
+          .: {}
+          f:conditions: {}
+          f:resources: {}
+          f:resourcesCount: {}
+      manager: argocd-applicationset-controller
+      operation: Update
+      subresource: status
+      time: 2026-04-27T14:44:02Z
+  resourceVersion: "222247"
+  uid: 01be56b2-40da-4e4e-8f4d-363f291e66bd
+spec:
+  generators:
+    - clusterDecisionResource:
+        configMapRef: acm-placement
+        labelSelector:
+          matchLabels:
+            cluster.open-cluster-management.io/placement: rocketchat-placement
+        requeueAfterSeconds: 180
+  template:
+    metadata:
+      name: rocketchat-{{name}}
+      labels:
+        velero.io/exclude-from-backup: "true"
+    spec:
+      destination:
+        namespace: default
+        server: "{{server}}"
+      project: default
+      sources:
+        - path: rocketchat
+          repoURL: https://github.com/levenhagen/rocketchat-acm.git
+          targetRevision: main
+          repositoryType: git
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - PruneLast=true
+status:
+  conditions:
+    - lastTransitionTime: 2026-04-27T14:41:02Z
+      message: All applications have been generated successfully
+      reason: ApplicationSetUpToDate
+      status: "False"
+      type: ErrorOccurred
+    - lastTransitionTime: 2026-04-27T14:41:02Z
+      message: Successfully generated parameters for all Applications
+      reason: ParametersGenerated
+      status: "True"
+      type: ParametersGenerated
+    - lastTransitionTime: 2026-04-27T14:41:02Z
+      message: All applications have been generated successfully
+      reason: ApplicationSetUpToDate
+      status: "True"
+      type: ResourcesUpToDate
+  resources:
+    - name: rocketchat-rosa-gpu
+      namespace: openshift-gitops
+      group: argoproj.io
+      health:
+        status: Healthy
+      kind: Application
+      status: Synced
+      version: v1alpha1
+  resourcesCount: 1
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: rocketchat-placement
+  namespace: openshift-gitops
+  creationTimestamp: 2026-04-27T14:38:02Z
+  generation: 1
+  resourceVersion: "217549"
+  uid: c4f840e3-9527-425f-9ba0-4f9cbd790f39
+spec:
+  clusterSets:
+    - default
+  numberOfClusters: 1
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchExpressions:
+            - key: gpu-enabled
+              operator: In
+              values:
+                - "true"
+status:
+  conditions:
+    - type: PlacementMisconfigured
+      status: "False"
+      lastTransitionTime: 2026-04-27T14:38:02Z
+      message: Placement configurations check pass
+      reason: Succeedconfigured
+    - type: PlacementSatisfied
+      status: "True"
+      lastTransitionTime: 2026-04-27T14:38:02Z
+      message: All cluster decisions scheduled
+      reason: AllDecisionsScheduled
+  decisionGroups:
+    - clusterCount: 1
+      decisionGroupIndex: 0
+      decisionGroupName: ""
+      decisions:
+        - rocketchat-placement-decision-1
+  numberOfSelectedClusters: 1
